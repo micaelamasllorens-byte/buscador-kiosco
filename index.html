@@ -79,6 +79,21 @@
   .buscador.tiene-texto .lupa{display:none}
   .buscador.tiene-texto .limpiar{display:block}
 
+  .filtros{
+    margin-top:10px;display:flex;gap:8px;
+  }
+  .chip{
+    border:none;cursor:pointer;
+    font-size:.82rem;font-weight:700;
+    padding:7px 14px;border-radius:20px;
+    letter-spacing:.02em;
+    color:#fff;background:rgba(255,255,255,.18);
+    transition:background .15s;
+  }
+  .chip:hover{background:rgba(255,255,255,.3)}
+  .chip.activo.chip-st{background:var(--verde);color:#fff}
+  .chip.activo.chip-vg{background:var(--violeta);color:#fff}
+
   .estado{
     text-align:center;color:var(--gris);
     padding:48px 20px;font-size:1rem;
@@ -147,6 +162,10 @@
         <input type="text" id="q" placeholder="Buscá un producto…" autocomplete="off" autofocus>
         <span class="lupa">&#9906;</span>
         <button class="limpiar" id="limpiar" aria-label="Borrar">&times;</button>
+      </div>
+      <div class="filtros">
+        <button class="chip chip-st" data-filtro="sin tacc">Sin TACC</button>
+        <button class="chip chip-vg" data-filtro="vegano">Vegano</button>
       </div>
     </div>
   </header>
@@ -264,7 +283,16 @@ function render(q){
   const nq = normalizar(q).trim();
   let res = productos;
   if(nq){
-    res = productos.filter(p => normalizar(p.nombre).includes(nq));
+    // Filtros especiales por etiqueta
+    const esBusquedaST = (nq === 'sin tacc' || nq === 'sintacc' || nq === 'sin tac' || nq === 'sin gluten' || nq === 'celiaco' || nq === 'celiacos' || nq === 'celiaco/a');
+    const esBusquedaVG = (nq === 'vegano' || nq === 'veganos' || nq === 'vegana' || nq === 'veganas' || nq === 'vegan');
+    if(esBusquedaST){
+      res = productos.filter(p => p.st);
+    } else if(esBusquedaVG){
+      res = productos.filter(p => p.vg);
+    } else {
+      res = productos.filter(p => normalizar(p.nombre).includes(nq));
+    }
   }
   lista.innerHTML = '';
   if(res.length===0){
@@ -299,13 +327,36 @@ function render(q){
   lista.appendChild(frag);
 }
 
+function actualizarChips(){
+  const val = normalizar(input.value).trim();
+  document.querySelectorAll('.chip').forEach(ch => {
+    ch.classList.toggle('activo', normalizar(ch.dataset.filtro).trim() === val);
+  });
+}
+
 input.addEventListener('input', e => {
   caja.classList.toggle('tiene-texto', e.target.value.length>0);
+  actualizarChips();
   render(e.target.value);
 });
 btnLimpiar.addEventListener('click', () => {
   input.value=''; caja.classList.remove('tiene-texto');
+  actualizarChips();
   render(''); input.focus();
+});
+
+document.querySelectorAll('.chip').forEach(ch => {
+  ch.addEventListener('click', () => {
+    const filtro = ch.dataset.filtro;
+    // Si ya estaba activo, lo apaga
+    if(normalizar(input.value).trim() === normalizar(filtro).trim()){
+      input.value=''; caja.classList.remove('tiene-texto');
+    } else {
+      input.value = filtro; caja.classList.add('tiene-texto');
+    }
+    actualizarChips();
+    render(input.value);
+  });
 });
 
 cargar();
