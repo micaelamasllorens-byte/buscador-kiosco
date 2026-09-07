@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Buscador de precios · Kiosco Brandsen</title>
+<style>
+  :root{
+    --tinta:#1c2a34;
+    --papel:#fbf7ef;
+    --crema:#f2ebdd;
+    --rojo:#c8362e;
+    --rojo-hover:#a82a24;
+    --verde:#2f7d4f;
+    --verde-suave:#e3f0e6;
+    --violeta:#6b4a8a;
+    --violeta-suave:#efe7f4;
+    --linea:#e0d7c6;
+    --gris:#7a7264;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    font-family:"Segoe UI",system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;
+    background:var(--papel);
+    color:var(--tinta);
+    line-height:1.4;
+    min-height:100vh;
+  }
+  .wrap{max-width:760px;margin:0 auto;padding:0 16px 80px}
+
+  header{
+    position:sticky;top:0;z-index:10;
+    background:var(--rojo);
+    color:#fff;
+    padding:18px 16px 16px;
+    box-shadow:0 2px 0 rgba(0,0,0,.12);
+  }
+  .header-inner{max-width:760px;margin:0 auto}
+  .marca{
+    display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;
+  }
+  .marca h1{
+    font-size:1.5rem;font-weight:800;letter-spacing:-.01em;
+  }
+  .marca span{
+    font-size:.82rem;opacity:.9;font-weight:500;
+  }
+  .buscador{
+    margin-top:14px;position:relative;
+  }
+  .buscador input{
+    width:100%;
+    font-size:1.15rem;
+    padding:15px 46px 15px 16px;
+    border:none;border-radius:12px;
+    background:#fff;color:var(--tinta);
+    outline:3px solid transparent;
+    transition:outline-color .15s;
+  }
+  .buscador input:focus{outline-color:var(--tinta)}
+  .buscador .lupa{
+    position:absolute;right:16px;top:50%;transform:translateY(-50%);
+    font-size:1.2rem;color:var(--gris);pointer-events:none;
+  }
+  .buscador .limpiar{
+    position:absolute;right:14px;top:50%;transform:translateY(-50%);
+    background:var(--crema);border:none;border-radius:50%;
+    width:26px;height:26px;font-size:1rem;color:var(--tinta);
+    cursor:pointer;display:none;line-height:1;
+  }
+  .buscador.tiene-texto .lupa{display:none}
+  .buscador.tiene-texto .limpiar{display:block}
+
+  .estado{
+    text-align:center;color:var(--gris);
+    padding:48px 20px;font-size:1rem;
+  }
+  .estado.error{color:var(--rojo)}
+
+  .conteo{
+    padding:16px 2px 6px;font-size:.85rem;color:var(--gris);
+  }
+
+  ul{list-style:none}
+  .item{
+    display:flex;align-items:center;gap:12px;
+    padding:14px 4px;border-bottom:1px solid var(--linea);
+  }
+  .item .info{flex:1;min-width:0}
+  .item .nombre{
+    font-size:1.02rem;font-weight:600;
+  }
+  .item .cat{
+    font-size:.75rem;color:var(--gris);margin-top:2px;
+  }
+  .tags{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+  .tag{
+    font-size:.7rem;font-weight:700;
+    padding:2px 8px;border-radius:20px;
+  }
+  .tag.st{background:var(--verde-suave);color:var(--verde)}
+  .tag.vg{background:var(--violeta-suave);color:var(--violeta)}
+  .precio{
+    font-size:1.15rem;font-weight:800;white-space:nowrap;
+    color:var(--tinta);
+  }
+  .precio.sin{
+    font-size:.8rem;font-weight:600;color:var(--gris);
+  }
+
+  mark{background:#ffe9a8;color:inherit;border-radius:2px;padding:0 1px}
+
+  footer{
+    text-align:center;padding:28px 16px;color:var(--gris);
+    font-size:.78rem;
+  }
+  @media(max-width:480px){
+    .marca h1{font-size:1.3rem}
+    .item .nombre{font-size:.96rem}
+  }
+</style>
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <div class="marca">
+        <h1>Kiosco Brandsen</h1>
+        <span>Buscador de precios</span>
+      </div>
+      <div class="buscador" id="cajaBuscador">
+        <input type="text" id="q" placeholder="Buscá un producto…" autocomplete="off" autofocus>
+        <span class="lupa">⌕</span>
+        <button class="limpiar" id="limpiar" aria-label="Borrar">×</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div id="conteo" class="conteo" style="display:none"></div>
+    <ul id="lista"></ul>
+    <div id="estado" class="estado">Cargando lista…</div>
+  </div>
+
+  <footer>
+    Los precios se actualizan solos desde la lista base.<br>
+    Kiosco Brandsen · Brandsen 119, Quilmes · WhatsApp 11 3872-0888
+  </footer>
+
+<script>
+// ====== CONFIGURACIÓN ======
+// Pegá acá el enlace CSV publicado de tu hoja BASE (ver instrucciones).
+const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRJxg_tnPLtQ1Z1L7eTtvLppEhDqIkc85itp3bLklYWF18VlRbubEsggBtOh8YV82u9iLVbiM76hXgu/pub?gid=525225460&single=true&output=csv";
+// ===========================
+
+const estado = document.getElementById('estado');
+const lista = document.getElementById('lista');
+const conteo = document.getElementById('conteo');
+const input = document.getElementById('q');
+const caja = document.getElementById('cajaBuscador');
+const btnLimpiar = document.getElementById('limpiar');
+
+let productos = [];
+
+// Parser CSV simple que respeta comillas
+function parseCSV(texto){
+  const filas = [];
+  let campo = '', fila = [], enComillas = false;
+  for(let i=0;i<texto.length;i++){
+    const c = texto[i];
+    if(enComillas){
+      if(c === '"'){
+        if(texto[i+1] === '"'){ campo += '"'; i++; }
+        else enComillas = false;
+      } else campo += c;
+    } else {
+      if(c === '"') enComillas = true;
+      else if(c === ',') { fila.push(campo); campo=''; }
+      else if(c === '\n'){ fila.push(campo); filas.push(fila); fila=[]; campo=''; }
+      else if(c === '\r'){ /* ignorar */ }
+      else campo += c;
+    }
+  }
+  if(campo.length || fila.length){ fila.push(campo); filas.push(fila); }
+  return filas;
+}
+
+function normalizar(s){
+  return (s||'').toString().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
+
+function esSi(v){
+  return normalizar(v).trim() === 'si';
+}
+
+function formatearPrecio(v){
+  if(v===undefined || v===null) return '';
+  let limpio = v.toString().replace(/[^0-9.,]/g,'').trim();
+  if(!limpio) return '';
+  // quitar separadores para validar
+  const num = parseInt(limpio.replace(/[.,]/g,''),10);
+  if(isNaN(num) || num===0) return '';
+  return '$' + num.toLocaleString('es-AR');
+}
+
+function cargar(){
+  if(CSV_URL === "PEGAR_ACA_EL_ENLACE_CSV"){
+    estado.className = 'estado error';
+    estado.innerHTML = 'Falta pegar el enlace de la lista.<br><small>Seguí las instrucciones para conectarla.</small>';
+    return;
+  }
+  fetch(CSV_URL)
+    .then(r => { if(!r.ok) throw new Error('no'); return r.text(); })
+    .then(txt => {
+      const filas = parseCSV(txt);
+      // Buscar fila de encabezado (contiene PRODUCTO y PRECIO)
+      let hIdx = filas.findIndex(f => f.some(c => normalizar(c)==='producto') && f.some(c => normalizar(c)==='precio'));
+      if(hIdx === -1) hIdx = 0;
+      const enc = filas[hIdx].map(c => normalizar(c).trim());
+      const iCat = enc.indexOf('categoria');
+      const iProd = enc.indexOf('producto');
+      const iPrec = enc.indexOf('precio');
+      const iST = enc.indexOf('sin tacc');
+      const iVG = enc.indexOf('vegano');
+
+      productos = [];
+      for(let i=hIdx+1;i<filas.length;i++){
+        const f = filas[i];
+        const nombre = (f[iProd]||'').trim();
+        if(!nombre) continue;
+        productos.push({
+          cat: iCat>-1 ? (f[iCat]||'').trim() : '',
+          nombre,
+          precio: iPrec>-1 ? formatearPrecio(f[iPrec]) : '',
+          st: iST>-1 ? esSi(f[iST]) : false,
+          vg: iVG>-1 ? esSi(f[iVG]) : false,
+        });
+      }
+      estado.style.display='none';
+      render('');
+    })
+    .catch(() => {
+      estado.className = 'estado error';
+      estado.textContent = 'No se pudo cargar la lista. Revisá la conexión.';
+    });
+}
+
+function resaltar(texto, q){
+  if(!q) return texto;
+  const nt = normalizar(texto), nq = normalizar(q);
+  const idx = nt.indexOf(nq);
+  if(idx===-1) return texto;
+  return texto.slice(0,idx) + '<mark>' + texto.slice(idx,idx+q.length) + '</mark>' + texto.slice(idx+q.length);
+}
+
+function render(q){
+  const nq = normalizar(q).trim();
+  let res = productos;
+  if(nq){
+    res = productos.filter(p => normalizar(p.nombre).includes(nq));
+  }
+  lista.innerHTML = '';
+  if(res.length===0){
+    conteo.style.display='none';
+    estado.style.display='block';
+    estado.className='estado';
+    estado.textContent = nq ? 'No hay productos con ese nombre.' : 'Escribí para buscar.';
+    return;
+  }
+  estado.style.display='none';
+  conteo.style.display='block';
+  conteo.textContent = nq
+    ? res.length + (res.length===1?' resultado':' resultados')
+    : res.length + ' productos · escribí para filtrar';
+
+  const frag = document.createDocumentFragment();
+  res.forEach(p => {
+    const li = document.createElement('li');
+    li.className='item';
+    let tags='';
+    if(p.st) tags += '<span class="tag st">SIN TACC</span>';
+    if(p.vg) tags += '<span class="tag vg">VEGANO</span>';
+    li.innerHTML = `
+      <div class="info">
+        <div class="nombre">${resaltar(p.nombre,q)}</div>
+        ${p.cat?`<div class="cat">${p.cat}</div>`:''}
+        ${tags?`<div class="tags">${tags}</div>`:''}
+      </div>
+      <div class="precio ${p.precio?'':'sin'}">${p.precio || 'a confirmar'}</div>
+    `;
+    frag.appendChild(li);
+  });
+  lista.appendChild(frag);
+}
+
+input.addEventListener('input', e => {
+  caja.classList.toggle('tiene-texto', e.target.value.length>0);
+  render(e.target.value);
+});
+btnLimpiar.addEventListener('click', () => {
+  input.value=''; caja.classList.remove('tiene-texto');
+  render(''); input.focus();
+});
+
+cargar();
+</script>
+</body>
+</html>
