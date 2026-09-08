@@ -259,7 +259,18 @@ function esSi(v){
 
 function formatearPrecio(v){
   if(v===undefined || v===null) return '';
-  let limpio = v.toString().replace(/[^0-9.,]/g,'').trim();
+  const original = v.toString().trim();
+  if(!original) return '';
+
+  // Si el precio tiene formato de promo (contiene una X entre números,
+  // ej: "2X$2500", "3X2", "1X$8500"), lo mostramos tal cual está escrito.
+  if(/\d\s*[xX]\s*\$?\s*\d/.test(original)){
+    // Normalizamos un poco la presentación: mayúscula la X y agregamos $ si falta antes del número final
+    return original.toUpperCase().replace(/\s+/g,' ');
+  }
+
+  // Precio normal: extraemos el número y lo formateamos con separador de miles
+  let limpio = original.replace(/[^0-9.,]/g,'').trim();
   if(!limpio) return '';
   const num = parseInt(limpio.replace(/[.,]/g,''),10);
   if(isNaN(num) || num===0) return '';
