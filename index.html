@@ -83,6 +83,15 @@
   .filtros{
     margin-top:10px;display:flex;gap:8px;
   }
+  .filtros-cat{
+    margin-top:8px;display:flex;gap:8px;
+    overflow-x:auto;padding-bottom:2px;
+    scrollbar-width:none;
+  }
+  .filtros-cat::-webkit-scrollbar{display:none}
+  .filtros-cat:empty{display:none}
+  .chip-cat{flex:0 0 auto}
+  .chip.activo.chip-cat{background:var(--amarillo-suave);color:var(--rojo-osc)}
   .chip{
     border:none;cursor:pointer;
     font-size:.82rem;font-weight:700;
@@ -195,6 +204,7 @@
         <button class="chip chip-st" data-filtro="sin tacc">Sin TACC</button>
         <button class="chip chip-vg" data-filtro="vegano">Vegano</button>
       </div>
+      <div class="filtros-cat" id="filtrosCat"></div>
     </div>
   </header>
 
@@ -227,8 +237,10 @@ const conteo = document.getElementById('conteo');
 const input = document.getElementById('q');
 const caja = document.getElementById('cajaBuscador');
 const btnLimpiar = document.getElementById('limpiar');
+const filtrosCat = document.getElementById('filtrosCat');
 
 let productos = [];
+let categoriasNorm = new Set();
 
 function parseCSV(texto){
   const filas = [];
@@ -308,6 +320,7 @@ function cargar(){
           vg: iVG>-1 ? esSi(f[iVG]) : false,
         });
       }
+      renderFiltrosCategoria();
       estado.style.display='none';
       render('');
     })
@@ -333,12 +346,15 @@ function render(q){
     const esBusquedaST = (nq === 'sin tacc' || nq === 'sintacc' || nq === 'sin tac' || nq === 'sin gluten' || nq === 'celiaco' || nq === 'celiacos' || nq === 'celiaco/a');
     const esBusquedaVG = (nq === 'vegano' || nq === 'veganos' || nq === 'vegana' || nq === 'veganas' || nq === 'vegan');
     const esBusquedaPR = (nq === 'promo' || nq === 'promos' || nq === 'promocion' || nq === 'promociones' || nq === 'oferta' || nq === 'ofertas');
+    const esBusquedaCat = categoriasNorm.has(nq);
     if(esBusquedaPR){
       res = productos.filter(p => normalizar(p.nombre).includes('promo'));
     } else if(esBusquedaST){
       res = productos.filter(p => p.st);
     } else if(esBusquedaVG){
       res = productos.filter(p => p.vg);
+    } else if(esBusquedaCat){
+      res = productos.filter(p => normalizar(p.cat) === nq);
     } else {
       res = productos.filter(p => normalizar(p.nombre).includes(nq));
     }
@@ -383,6 +399,33 @@ function actualizarChips(){
   document.querySelectorAll('.chip').forEach(ch => {
     ch.classList.toggle('activo', normalizar(ch.dataset.filtro).trim() === val);
   });
+}
+
+function renderFiltrosCategoria(){
+  const categorias = [...new Set(productos.map(p => p.cat).filter(Boolean))]
+    .sort((a,b) => a.localeCompare(b, 'es'));
+  categoriasNorm = new Set(categorias.map(c => normalizar(c).trim()));
+  filtrosCat.innerHTML = '';
+  categorias.forEach(cat => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'chip chip-cat';
+    btn.dataset.filtro = normalizar(cat).trim();
+    btn.textContent = cat;
+    btn.addEventListener('click', () => {
+      const filtro = btn.dataset.filtro;
+      if(normalizar(input.value).trim() === filtro){
+        input.value=''; caja.classList.remove('tiene-texto');
+      } else {
+        input.value = cat; caja.classList.add('tiene-texto');
+      }
+      actualizarChips();
+      actualizarWsp();
+      render(input.value);
+    });
+    filtrosCat.appendChild(btn);
+  });
+  actualizarChips();
 }
 
 input.addEventListener('input', e => {
