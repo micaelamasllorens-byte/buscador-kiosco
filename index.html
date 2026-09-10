@@ -83,15 +83,13 @@
   .filtros{
     margin-top:10px;display:flex;gap:8px;
   }
-  .filtros-cat{
-    margin-top:8px;display:flex;gap:8px;
-    overflow-x:auto;padding-bottom:2px;
-    scrollbar-width:none;
+  .select-cat{
+    margin-top:8px;width:100%;
+    font-size:.85rem;font-weight:700;color:var(--rojo-osc);
+    padding:10px 34px 10px 14px;border-radius:10px;border:none;outline:none;
+    background:#fff url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23a41f22' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E") no-repeat right 10px center;
+    background-size:18px;appearance:none;-webkit-appearance:none;-moz-appearance:none;
   }
-  .filtros-cat::-webkit-scrollbar{display:none}
-  .filtros-cat:empty{display:none}
-  .chip-cat{flex:0 0 auto}
-  .chip.activo.chip-cat{background:var(--amarillo-suave);color:var(--rojo-osc)}
   .chip{
     border:none;cursor:pointer;
     font-size:.82rem;font-weight:700;
@@ -204,7 +202,9 @@
         <button class="chip chip-st" data-filtro="sin tacc">Sin TACC</button>
         <button class="chip chip-vg" data-filtro="vegano">Vegano</button>
       </div>
-      <div class="filtros-cat" id="filtrosCat"></div>
+      <select id="selectCat" class="select-cat">
+        <option value="">Todas las categorías</option>
+      </select>
     </div>
   </header>
 
@@ -237,10 +237,11 @@ const conteo = document.getElementById('conteo');
 const input = document.getElementById('q');
 const caja = document.getElementById('cajaBuscador');
 const btnLimpiar = document.getElementById('limpiar');
-const filtrosCat = document.getElementById('filtrosCat');
+const selectCat = document.getElementById('selectCat');
 
 let productos = [];
 let categoriasNorm = new Set();
+let categoriasList = [];
 
 function parseCSV(texto){
   const filas = [];
@@ -320,7 +321,7 @@ function cargar(){
           vg: iVG>-1 ? esSi(f[iVG]) : false,
         });
       }
-      renderFiltrosCategoria();
+      renderCategorias();
       estado.style.display='none';
       render('');
     })
@@ -401,42 +402,31 @@ function actualizarChips(){
   });
 }
 
-function renderFiltrosCategoria(){
-  const categorias = [...new Set(productos.map(p => p.cat).filter(Boolean))]
+function renderCategorias(){
+  categoriasList = [...new Set(productos.map(p => p.cat).filter(Boolean))]
     .sort((a,b) => a.localeCompare(b, 'es'));
-  categoriasNorm = new Set(categorias.map(c => normalizar(c).trim()));
-  filtrosCat.innerHTML = '';
-  categorias.forEach(cat => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'chip chip-cat';
-    btn.dataset.filtro = normalizar(cat).trim();
-    btn.textContent = cat;
-    btn.addEventListener('click', () => {
-      const filtro = btn.dataset.filtro;
-      if(normalizar(input.value).trim() === filtro){
-        input.value=''; caja.classList.remove('tiene-texto');
-      } else {
-        input.value = cat; caja.classList.add('tiene-texto');
-      }
-      actualizarChips();
-      actualizarWsp();
-      render(input.value);
-    });
-    filtrosCat.appendChild(btn);
-  });
-  actualizarChips();
+  categoriasNorm = new Set(categoriasList.map(c => normalizar(c).trim()));
+  selectCat.innerHTML = '<option value="">Todas las categorías</option>' +
+    categoriasList.map(c => '<option value="' + normalizar(c).trim() + '">' + c + '</option>').join('');
+  actualizarSelectCat();
+}
+
+function actualizarSelectCat(){
+  const val = normalizar(input.value).trim();
+  selectCat.value = categoriasNorm.has(val) ? val : '';
 }
 
 input.addEventListener('input', e => {
   caja.classList.toggle('tiene-texto', e.target.value.length>0);
   actualizarChips();
+  actualizarSelectCat();
   actualizarWsp();
   render(e.target.value);
 });
 btnLimpiar.addEventListener('click', () => {
   input.value=''; caja.classList.remove('tiene-texto');
   actualizarChips();
+  actualizarSelectCat();
   render(''); input.focus();
 });
 
@@ -450,8 +440,22 @@ document.querySelectorAll('.chip').forEach(ch => {
       input.value = filtro; caja.classList.add('tiene-texto');
     }
     actualizarChips();
+    actualizarSelectCat();
     render(input.value);
   });
+});
+
+selectCat.addEventListener('change', () => {
+  const val = selectCat.value;
+  if(!val){
+    input.value=''; caja.classList.remove('tiene-texto');
+  } else {
+    const original = categoriasList.find(c => normalizar(c).trim() === val) || val;
+    input.value = original; caja.classList.add('tiene-texto');
+  }
+  actualizarChips();
+  actualizarWsp();
+  render(input.value);
 });
 
 const wsp = document.getElementById('wsp');
