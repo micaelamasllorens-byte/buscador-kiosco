@@ -240,8 +240,7 @@ const btnLimpiar = document.getElementById('limpiar');
 const selectCat = document.getElementById('selectCat');
 
 let productos = [];
-let categoriasNorm = new Set();
-let categoriasList = [];
+let categoriaActiva = '';
 
 function parseCSV(texto){
   const filas = [];
@@ -294,40 +293,66 @@ function formatearPrecio(v){
   return '$' + num.toLocaleString('es-AR');
 }
 
+const CACHE_KEY = 'kiosco_csv_v1';
+
+function guardarCache(txt){
+  try{ localStorage.setItem(CACHE_KEY, txt); }
+  catch(e){ /* almacenamiento no disponible o lleno: seguimos sin cache */ }
+}
+
+function leerCache(){
+  try{ return localStorage.getItem(CACHE_KEY); }
+  catch(e){ return null; }
+}
+
+function procesarCSV(txt){
+  const filas = parseCSV(txt);
+  let hIdx = filas.findIndex(f => f.some(c => normalizar(c)==='producto') && f.some(c => normalizar(c)==='precio'));
+  if(hIdx === -1) hIdx = 0;
+  const enc = filas[hIdx].map(c => normalizar(c).trim());
+  const iCat = enc.indexOf('categoria');
+  const iProd = enc.indexOf('producto');
+  const iPrec = enc.indexOf('precio');
+  const iST = enc.indexOf('sin tacc');
+  const iVG = enc.indexOf('vegano');
+
+  productos = [];
+  for(let i=hIdx+1;i<filas.length;i++){
+    const f = filas[i];
+    const nombre = (f[iProd]||'').trim();
+    if(!nombre) continue;
+    productos.push({
+      cat: iCat>-1 ? (f[iCat]||'').trim() : '',
+      nombre,
+      precio: iPrec>-1 ? formatearPrecio(f[iPrec]) : '',
+      st: iST>-1 ? esSi(f[iST]) : false,
+      vg: iVG>-1 ? esSi(f[iVG]) : false,
+    });
+  }
+  renderCategorias();
+}
+
 function cargar(){
+  const cache = leerCache();
+  if(cache){
+    procesarCSV(cache);
+    estado.style.display='none';
+    render(input.value);
+  }
   fetch(CSV_URL)
     .then(r => { if(!r.ok) throw new Error('no'); return r.text(); })
     .then(txt => {
-      const filas = parseCSV(txt);
-      let hIdx = filas.findIndex(f => f.some(c => normalizar(c)==='producto') && f.some(c => normalizar(c)==='precio'));
-      if(hIdx === -1) hIdx = 0;
-      const enc = filas[hIdx].map(c => normalizar(c).trim());
-      const iCat = enc.indexOf('categoria');
-      const iProd = enc.indexOf('producto');
-      const iPrec = enc.indexOf('precio');
-      const iST = enc.indexOf('sin tacc');
-      const iVG = enc.indexOf('vegano');
-
-      productos = [];
-      for(let i=hIdx+1;i<filas.length;i++){
-        const f = filas[i];
-        const nombre = (f[iProd]||'').trim();
-        if(!nombre) continue;
-        productos.push({
-          cat: iCat>-1 ? (f[iCat]||'').trim() : '',
-          nombre,
-          precio: iPrec>-1 ? formatearPrecio(f[iPrec]) : '',
-          st: iST>-1 ? esSi(f[iST]) : false,
-          vg: iVG>-1 ? esSi(f[iVG]) : false,
-        });
-      }
-      renderCategorias();
+      guardarCache(txt);
+      procesarCSV(txt);
       estado.style.display='none';
-      render('');
+      render(input.value);
     })
     .catch(() => {
-      estado.className = 'estado error';
-      estado.textContent = 'No se pudo cargar la lista. Revisa la conexion.';
+      // Si ya teniamos una lista en cache, la dejamos como esta (mejor lista vieja que pantalla de error).
+      if(!cache){
+        estado.className = 'estado error';
+        estado.textContent = 'No se pudo cargar la lista. Revisa la conexion.';
+      }
     });
 }
 
@@ -347,30 +372,31 @@ function render(q){
     const esBusquedaST = (nq === 'sin tacc' || nq === 'sintacc' || nq === 'sin tac' || nq === 'sin gluten' || nq === 'celiaco' || nq === 'celiacos' || nq === 'celiaco/a');
     const esBusquedaVG = (nq === 'vegano' || nq === 'veganos' || nq === 'vegana' || nq === 'veganas' || nq === 'vegan');
     const esBusquedaPR = (nq === 'promo' || nq === 'promos' || nq === 'promocion' || nq === 'promociones' || nq === 'oferta' || nq === 'ofertas');
-    const esBusquedaCat = categoriasNorm.has(nq);
     if(esBusquedaPR){
       res = productos.filter(p => normalizar(p.nombre).includes('promo'));
     } else if(esBusquedaST){
       res = productos.filter(p => p.st);
     } else if(esBusquedaVG){
       res = productos.filter(p => p.vg);
-    } else if(esBusquedaCat){
-      res = productos.filter(p => normalizar(p.cat) === nq);
     } else {
       res = productos.filter(p => normalizar(p.nombre).includes(nq));
     }
   }
+  if(categoriaActiva){
+    res = res.filter(p => normalizar(p.cat).trim() === categoriaActiva);
+  }
+  const hayFiltro = Boolean(nq || categoriaActiva);
   lista.innerHTML = '';
   if(res.length===0){
     conteo.style.display='none';
     estado.style.display='block';
     estado.className='estado';
-    estado.textContent = nq ? 'No hay productos con ese nombre.' : 'Escribi para buscar.';
+    estado.textContent = hayFiltro ? 'No hay productos con ese nombre.' : 'Escribi para buscar.';
     return;
   }
   estado.style.display='none';
   conteo.style.display='block';
-  conteo.textContent = nq
+  conteo.textContent = hayFiltro
     ? res.length + (res.length===1?' resultado':' resultados')
     : res.length + ' productos - escribi para filtrar';
 
@@ -403,31 +429,26 @@ function actualizarChips(){
 }
 
 function renderCategorias(){
-  categoriasList = [...new Set(productos.map(p => p.cat).filter(Boolean))]
+  const categorias = [...new Set(productos.map(p => p.cat).filter(Boolean))]
     .sort((a,b) => a.localeCompare(b, 'es'));
-  categoriasNorm = new Set(categoriasList.map(c => normalizar(c).trim()));
+  const categoriasNorm = new Set(categorias.map(c => normalizar(c).trim()));
   selectCat.innerHTML = '<option value="">Todas las categorías</option>' +
-    categoriasList.map(c => '<option value="' + normalizar(c).trim() + '">' + c + '</option>').join('');
-  actualizarSelectCat();
-}
-
-function actualizarSelectCat(){
-  const val = normalizar(input.value).trim();
-  selectCat.value = categoriasNorm.has(val) ? val : '';
+    categorias.map(c => '<option value="' + normalizar(c).trim() + '">' + c + '</option>').join('');
+  // Si la categoria activa dejo de existir en los datos nuevos, la limpiamos.
+  if(categoriaActiva && !categoriasNorm.has(categoriaActiva)) categoriaActiva = '';
+  selectCat.value = categoriaActiva;
 }
 
 input.addEventListener('input', e => {
   caja.classList.toggle('tiene-texto', e.target.value.length>0);
   actualizarChips();
-  actualizarSelectCat();
   actualizarWsp();
   render(e.target.value);
 });
 btnLimpiar.addEventListener('click', () => {
   input.value=''; caja.classList.remove('tiene-texto');
   actualizarChips();
-  actualizarSelectCat();
-  render(''); input.focus();
+  render(input.value); input.focus();
 });
 
 document.querySelectorAll('.chip').forEach(ch => {
@@ -440,20 +461,12 @@ document.querySelectorAll('.chip').forEach(ch => {
       input.value = filtro; caja.classList.add('tiene-texto');
     }
     actualizarChips();
-    actualizarSelectCat();
     render(input.value);
   });
 });
 
 selectCat.addEventListener('change', () => {
-  const val = selectCat.value;
-  if(!val){
-    input.value=''; caja.classList.remove('tiene-texto');
-  } else {
-    const original = categoriasList.find(c => normalizar(c).trim() === val) || val;
-    input.value = original; caja.classList.add('tiene-texto');
-  }
-  actualizarChips();
+  categoriaActiva = selectCat.value;
   actualizarWsp();
   render(input.value);
 });
